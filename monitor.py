@@ -6,15 +6,15 @@ import json
 import os
 
 # ===================== 配置区 =====================
-URL = "https://zjj.sz.gov.cn/ztfw/gg/"
-KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号"]
+URL = "https://zjj.sz.gov.cn/ztfw/zfbz/tzgg2017/index.html"
+KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号", "安居型商品房", "安居房"]
 
 # 邮箱密钥（从仓库secrets读取）
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PWD = os.getenv("SENDER_PWD")
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
 
-# Gist持久化配置（新增两个secrets）
+# Gist持久化配置
 GIST_TOKEN = os.getenv("GIST_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
 # ==================================================
@@ -27,7 +27,7 @@ def load_seen_from_gist():
         print("Gist读取失败，使用空集合")
         return set()
     gist_data = resp.json()
-    file_content = list(gist_data["files"].values())[0]["content"]
+    file_content = gist_data["files"]["seen_titles.json"]["content"]
     try:
         return set(json.loads(file_content))
     except Exception as e:
@@ -47,7 +47,7 @@ def save_seen_to_gist(seen_set):
     requests.patch(f"https://api.github.com/gists/{GIST_ID}", headers=headers, json=payload, timeout=20)
 
 def fetch_announcements():
-    """抓取住建局公告列表"""
+    """抓取住建局保障房公告列表"""
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
@@ -73,20 +73,20 @@ def send_batch_email(new_items):
     if not new_items:
         return
     html_lines = []
-    html_lines.append("<h3>【深圳住建局保租房新公告提醒】</h3>")
+    html_lines.append("<h3>【深圳保障房新公告提醒】</h3>")
     for item in new_items:
         html_lines.append(f'<p><a href="{item["url"]}">{item["title"]}</a></p>')
     email_body = "\n".join(html_lines)
 
     msg = MIMEText(email_body, "html", "utf-8")
-    msg["Subject"] = "【保租房监控】发现新公告"
+    msg["Subject"] = "【保障房监控】发现新公告"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
 
     with smtplib.SMTP_SSL("smtp.qq.com", 465) as server:
         server.login(SENDER_EMAIL, SENDER_PWD)
         server.send_message(msg)
-    print(f"已发送邮件，共{len(new_items)}条新公告")
+    print(f"✅ 已发送邮件，共{len(new_items)}条新公告")
 
 def main():
     seen_titles = load_seen_from_gist()
