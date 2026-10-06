@@ -4,8 +4,11 @@ import smtplib
 from email.mime.text import MIMEText
 import json
 import os
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 # ===================== 配置区 =====================
-# 多站点列表：市局 + 宝安区
+# 仅保留：深圳市住建局 + 宝安区住建局
 URL_LIST = [
     {
         "name": "深圳市住建局",
@@ -16,7 +19,7 @@ URL_LIST = [
         "url": "https://www.baoan.gov.cn/bajshej/gkmlpt/index"
     }
 ]
-# 只保留保租房相关关键词，去掉安居房
+# 只保留保租房相关关键词
 KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号"]
 # 邮箱密钥（从仓库secrets读取）
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
@@ -53,13 +56,24 @@ def save_seen_to_gist(seen_set):
     requests.patch(f"https://api.github.com/gists/{GIST_ID}", headers=headers, json=payload, timeout=20)
 
 def fetch_announcements(site_info):
-    """抓取单个页面公告列表"""
+    """抓取单个页面公告列表，增加重试策略"""
     url = site_info["url"]
     site_name = site_info["name"]
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    resp = requests.get(url, headers=headers, timeout=20)
+    # 重试配置
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+
+    resp = session.get(url, headers=headers, timeout=30)
     resp.raise_for_status()
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -71,9 +85,8 @@ def fetch_announcements(site_info):
             continue
         title = a_tag.get_text(strip=True)
         link = a_tag.get("href", "")
-        # 处理相对路径
+        # 区分域名拼接相对链接
         if link.startswith("/"):
-            # 区分域名拼接
             if "baoan.gov.cn" in url:
                 link = "https://www.baoan.gov.cn" + link
             else:
@@ -102,7 +115,7 @@ def send_batch_email(new_items):
 def main():
     seen_titles = load_seen_from_gist()
     all_ann = []
-    # 循环遍历所有站点
+    # 循环遍历站点
     for site in URL_LIST:
         try:
             ann_list = fetch_announcements(site)
@@ -115,7 +128,6 @@ def main():
         title = ann["title"]
         if title in seen_titles:
             continue
-        # 关键词匹配，只抓保租房相关
         if any(k in title for k in KEYWORDS):
             new_matched.append(ann)
             seen_titles.add(title)
