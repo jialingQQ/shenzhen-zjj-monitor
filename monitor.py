@@ -7,7 +7,8 @@ import os
 
 # ===================== 配置区 =====================
 URL = "https://zjj.sz.gov.cn/ztfw/zfbz/tzgg2017/index.html"
-KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号", "安居型商品房", "安居房"]
+# 只保留保租房相关关键词，去掉安居房
+KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号"]
 
 # 邮箱密钥（从仓库secrets读取）
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
@@ -73,13 +74,13 @@ def send_batch_email(new_items):
     if not new_items:
         return
     html_lines = []
-    html_lines.append("<h3>【深圳保障房新公告提醒】</h3>")
+    html_lines.append("<h3>【深圳保租房新公告提醒】</h3>")
     for item in new_items:
         html_lines.append(f'<p><a href="{item["url"]}">{item["title"]}</a></p>')
     email_body = "\n".join(html_lines)
 
     msg = MIMEText(email_body, "html", "utf-8")
-    msg["Subject"] = "【保障房监控】发现新公告"
+    msg["Subject"] = "【保租房监控】发现新公告"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
 
@@ -96,7 +97,7 @@ def main():
         title = ann["title"]
         if title in seen_titles:
             continue
-        # 关键词匹配
+        # 关键词匹配，只抓保租房相关
         if any(k in title for k in KEYWORDS):
             new_matched.append(ann)
             seen_titles.add(title)
