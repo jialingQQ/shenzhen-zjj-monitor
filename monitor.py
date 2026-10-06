@@ -85,7 +85,7 @@ def main():
         if hit:
             print("关键词匹配，发送邮件通知")
             send_notice_email(latest_title, latest["url"], latest["date"])
-        # 更新临时记录
+        # 更新临时记录，存在容器临时目录，不提交回仓库
         with open(LAST_RECORD_FILE, "w", encoding="utf-8") as f:
             f.write(latest_title)
     else:
