@@ -1,8 +1,9 @@
 name: ShenZhenZJJMonitor
+
 on:
-  schedule:
-    - cron: '*/20 * * * *'
   workflow_dispatch:
+  schedule:
+    - cron: '0 * * * *'
 
 jobs:
   monitor-job:
@@ -10,13 +11,13 @@ jobs:
     steps:
       - name: 拉取代码
         uses: actions/checkout@v4
-
       - name: 安装Python依赖
         run: pip install requests beautifulsoup4
-
       - name: 运行监控脚本
+        run: python monitor.py
         env:
           SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
           SENDER_PWD: ${{ secrets.SENDER_PWD }}
           RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
-        run: python monitor.py
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
