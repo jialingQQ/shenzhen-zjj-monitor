@@ -6,13 +6,12 @@ import os
 
 # =====================配置区=====================
 URL = "https://zjj.sz.gov.cn/ztfw/zfbz/tzgg2017/index.html"
-# 自定义监控关键词，自己修改
 KEYWORDS = ["安居型商品房", "配售", "摇号", "选房", "认购"]
 
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PWD = os.getenv("SENDER_PWD")
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
-LAST_RECORD_FILE = "last_record.txt"
+LAST_RECORD_FILE = "/tmp/last_record.txt"
 # ================================================
 
 def fetch_announcements():
@@ -63,11 +62,9 @@ def send_notice_email(title, url, date):
 
 def main():
     last_title = ""
-    try:
+    if os.path.exists(LAST_RECORD_FILE):
         with open(LAST_RECORD_FILE, "r", encoding="utf-8") as f:
             last_title = f.read().strip()
-    except FileNotFoundError:
-        last_title = ""
 
     announcements = fetch_announcements()
     announcements = [x for x in announcements if len(x["title"])>5]
@@ -88,7 +85,7 @@ def main():
         if hit:
             print("关键词匹配，发送邮件通知")
             send_notice_email(latest_title, latest["url"], latest["date"])
-        # 更新记录
+        # 更新临时记录
         with open(LAST_RECORD_FILE, "w", encoding="utf-8") as f:
             f.write(latest_title)
     else:
