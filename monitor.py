@@ -4,22 +4,28 @@ import smtplib
 from email.mime.text import MIMEText
 import json
 import os
-
 # ===================== 配置区 =====================
-URL = "https://zjj.sz.gov.cn/ztfw/zfbz/tzgg2017/index.html"
+# 多站点列表：市局 + 宝安区
+URL_LIST = [
+    {
+        "name": "深圳市住建局",
+        "url": "https://zjj.sz.gov.cn/ztfw/zfbz/tzgg2017/index.html"
+    },
+    {
+        "name": "宝安区住建局",
+        "url": "https://www.baoan.gov.cn/bajshej/gkmlpt/index"
+    }
+]
 # 只保留保租房相关关键词，去掉安居房
 KEYWORDS = ["保租房", "保障性租赁住房", "租赁住房", "认租", "配租", "选房", "摇号"]
-
 # 邮箱密钥（从仓库secrets读取）
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PWD = os.getenv("SENDER_PWD")
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
-
 # Gist持久化配置
 GIST_TOKEN = os.getenv("GIST_TOKEN")
 GIST_ID = os.getenv("GIST_ID")
 # ==================================================
-
 def load_seen_from_gist():
     """从Gist读取已推送过的公告标题集合"""
     headers = {"Authorization": f"token {GIST_TOKEN}"}
@@ -34,7 +40,6 @@ def load_seen_from_gist():
     except Exception as e:
         print(f"解析Gist内容异常: {e}")
         return set()
-
 def save_seen_to_gist(seen_set):
     """把更新后的已读列表写回Gist"""
     headers = {"Authorization": f"token {GIST_TOKEN}"}
@@ -47,12 +52,14 @@ def save_seen_to_gist(seen_set):
     }
     requests.patch(f"https://api.github.com/gists/{GIST_ID}", headers=headers, json=payload, timeout=20)
 
-def fetch_announcements():
-    """抓取住建局保障房公告列表"""
+def fetch_announcements(site_info):
+    """抓取单个页面公告列表"""
+    url = site_info["url"]
+    site_name = site_info["name"]
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-    resp = requests.get(URL, headers=headers, timeout=20)
+    resp = requests.get(url, headers=headers, timeout=20)
     resp.raise_for_status()
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -64,9 +71,14 @@ def fetch_announcements():
             continue
         title = a_tag.get_text(strip=True)
         link = a_tag.get("href", "")
+        # 处理相对路径
         if link.startswith("/"):
-            link = "https://zjj.sz.gov.cn" + link
-        result.append({"title": title, "url": link})
+            # 区分域名拼接
+            if "baoan.gov.cn" in url:
+                link = "https://www.baoan.gov.cn" + link
+            else:
+                link = "https://zjj.sz.gov.cn" + link
+        result.append({"title": title, "url": link, "site": site_name})
     return result
 
 def send_batch_email(new_items):
@@ -76,14 +88,12 @@ def send_batch_email(new_items):
     html_lines = []
     html_lines.append("<h3>【深圳保租房新公告提醒】</h3>")
     for item in new_items:
-        html_lines.append(f'<p><a href="{item["url"]}">{item["title"]}</a></p>')
+        html_lines.append(f'<p><b>{item["site"]}</b>：<a href="{item["url"]}">{item["title"]}</a></p>')
     email_body = "\n".join(html_lines)
-
     msg = MIMEText(email_body, "html", "utf-8")
     msg["Subject"] = "【保租房监控】发现新公告"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
-
     with smtplib.SMTP_SSL("smtp.qq.com", 465) as server:
         server.login(SENDER_EMAIL, SENDER_PWD)
         server.send_message(msg)
@@ -91,7 +101,15 @@ def send_batch_email(new_items):
 
 def main():
     seen_titles = load_seen_from_gist()
-    all_ann = fetch_announcements()
+    all_ann = []
+    # 循环遍历所有站点
+    for site in URL_LIST:
+        try:
+            ann_list = fetch_announcements(site)
+            all_ann.extend(ann_list)
+            print(f"✅ {site['name']} 抓取到 {len(ann_list)} 条公告")
+        except Exception as e:
+            print(f"❌ 抓取 {site['name']} 失败: {e}")
     new_matched = []
     for ann in all_ann:
         title = ann["title"]
